@@ -1,4 +1,4 @@
-# nf-template
+# nf-adaptive
 
 Template to make [Nextflow] workflows
 
@@ -50,6 +50,19 @@ This workflow will output:
 
 ## Steps
 
+1. Separate bam file into two files with [samtools]: one containing reads aligned outside the selected panel, and one containing reads aligned inside the selected panel (including buffer region).
+2. Run [mosdepth] on the bam containing background alignments to get background coverage.
+3. Run [multiqc] on the output of [mosdepth] on background alignemnts.
+4. Run [mosdepth] 3 times on the bam containing alignments to panel to get coverage for each genes in the panel (without buffer region) under different filtering conditions :
+    a. No mapping quality filter (samtools flag 1540)
+    b. No secondary alignments (samtools flag 1796)
+    c. MAPQ = 60
+5. Run [R] script to produce a coverage plot showing coverage under each filtering conditions for each genes.
+
 [Docker]: https://www.docker.com
 [Apptainer]: https://apptainer.org
 [Nextflow]: https://www.nextflow.io/docs/latest/index.html
+[samtools]: http://www.htslib.org
+[multiqc]: https://multiqc.info
+[mosdepth]: https://github.com/brentp/mosdepth
+[R]: https://www.r-project.org/
