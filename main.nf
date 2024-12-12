@@ -28,11 +28,8 @@ if (params.help) {
 
 // Import subworkflows and modules
 
-include { SEPARATE } from './subworkflows/separate_panel'
-include { CREATE_BED as BED_FULL } from './subworkflows/mosdepth'
-include { CREATE_BED as BED_PRIM } from './subworkflows/mosdepth'
-include { CREATE_BED as BED_UNIQ } from './subworkflows/mosdepth'
-include { coverage_as } from './modules/rscripts'
+include { COVERAGE_SEPARATE } from './subworkflows/coverage_separate'
+include { PLOT } from './subworkflows/visualization'
 
 // Main workflow logic
 
@@ -45,38 +42,11 @@ workflow {
   // Point to empty bed file to get background coverage
   nobed_ch = Channel.fromPath("${projectDir}/assets/NO_BED")
 
-  SEPARATE(bam_ch, bed_full_ch, nobed_ch)
-
-  // Point to empty bed file to get background coverage
-  nobed_ch = Channel.fromPath("${projectDir}/assets/NO_BED")
-
-  if (!params.separate_only) {
-  // Create bed files for panel without buffer with different filters
-  // Filter out only read unmapped, read fails platform/vendor quality checks and read is PCR or optical duplicate (baseline):
   bed_nopad_ch = Channel.fromPath(params.bed_nopad) // Bed file without buffer region
-  //all_flag = Channel.of(1540)
 
-  BED_FULL(SEPARATE.out.panel, bed_nopad_ch, 1540, 0, 'nofilter')
-  nofilt_bed = BED_FULL.out.bed
-
-  // Filter out secondary alignment:
-  BED_PRIM(SEPARATE.out.panel, bed_nopad_ch, 1796, 0, 'primary')
-  prim_bed = BED_PRIM.out.bed
-  // Keep only mapping quality 60 (uniquely mapped reads)
-  BED_UNIQ(SEPARATE.out.panel, bed_nopad_ch, 1796, 60, 'mapq60')
-  uniq_bed = BED_UNIQ.out.bed
-
-  // Extract background coverage to value:
-
-  background_coverage = SEPARATE.out.mosdepth_bg
-    .splitText()
-    .last()
-    .map { row -> row.tokenize('\t')[3].toDouble() }
-
-  // Coverage plot :
-
-  coverage_as(nofilt_bed, prim_bed, uniq_bed, background_coverage)
-
-  }
-
+  COVERAGE_SEPARATE(bam_ch, bed_full_ch, nobed_ch, bed_nopad_ch)
+  PLOT(COVERAGE_SEPARATE.out.bed, COVERAGE_SEPARATE.out.summary)
+  
 }
+
+

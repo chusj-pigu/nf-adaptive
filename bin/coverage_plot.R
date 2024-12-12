@@ -12,7 +12,7 @@ process_bed <- function(input_bed) {
     dplyr::rename(chr = V1, start = V2, end = V3, gene = V4, coverage = V5) %>%
     arrange(chr,start,end) %>%
     mutate(gene = ifelse(duplicated(gene), paste(gene, chr, sep = "_"), gene)) %>%
-    rename_with(~ gsub(".*_(.*?)\\.regions.*", "\\1", input_bed), coverage) %>%
+    rename_with(~ gsub(".*_(.*)\\.regions\\.bed$", "\\1", input_bed), coverage) %>%
   return(bed)
 }
 
@@ -116,7 +116,7 @@ generate_plot <- function(bed, ann_out, ann_facet, output_pdf) {
     mutate(gene = factor(gene, levels = unique(gene)))
   
   # Plot and save as PDF
-  pdf(output_pdf, width = 20, height = 14)
+  pdf(output_pdf, width = 22, height = 14)
   print( ggplot() +
            geom_bar(data = bed, aes(x = gene, y = coverage, fill = fidelity, alpha = set), stat = "identity") +
            geom_text(data=ann_out, aes(x = gene, y = coverage-50, label = ann), size =4, hjust = "inward") +
@@ -142,7 +142,7 @@ generate_plot <- function(bed, ann_out, ann_facet, output_pdf) {
            scale_fill_manual(values = c("turquoise4", "lavenderblush4"), breaks = c("normal", "low"), guide = "none") +
            scale_alpha_manual(values = c(0.33,0.66,1), breaks = c("no filter", "primary only", "mapq60")) +
            coord_cartesian(expand = FALSE, clip = "off") +
-           labs(y = "Mean coverage", alpha = "Alignement type filter", fill = "", title = sub("\\..*", "",full_bed_file)) )
+           labs(y = "Mean coverage", alpha = "Alignement type filter", fill = "", title = sub("^(.*)_.*$", "\\1", full_bed_file)) )
   dev.off()
 }
 # Usage ####
@@ -165,7 +165,7 @@ bg_cov <- as.numeric(args[4])
 # Join input bed files together in a list
 input <- c(full_bed_file, prim_bed_file, mapq60_bed_file)
 bed_list <- lapply(input, process_bed)
-names(bed_list) <- gsub(".*_(.*?)\\.regions.*", "\\1", input)
+names(bed_list) <- gsub(".*_(.*)\\.regions\\.bed$", "\\1", input)
 
 # Store median for pirmary alignment only as a variable for future usage
 median <- median(bed_list[["primary"]]$primary)
@@ -189,3 +189,4 @@ output_pdf <- sub("\\..*", "_coverage_mapq.pdf", full_bed_file)
 
 # Generate the plot
 generate_plot(bed_long, ann_df, ann_facet, output_pdf)
+
