@@ -11,9 +11,10 @@ process_bed <- function(input_bed) {
   bed <- read.delim(input_bed, header = FALSE) %>%
     dplyr::rename(chr = V1, start = V2, end = V3, gene = V4, coverage = V5) %>%
     arrange(chr,start,end) %>%
-    mutate(gene = ifelse(duplicated(gene), paste(gene, chr, sep = "_"), gene)) %>%
     rename_with(~ gsub(".*_(.*)\\.regions\\.bed$", "\\1", input_bed), coverage) %>%
-  return(bed)
+    mutate(gene = gsub("^\\d{3}_.+?_", "", gene)) %>%
+    mutate(gene = ifelse(duplicated(gene), paste(gene, chr, sep = "_"), gene))
+    return(bed)
 }
 
 normalize_bed <- function(bed) {
@@ -185,7 +186,9 @@ bed_long <- df_long(bed_norm)
 ann_df <- generate_ann_out(bed_long, bed_all)
 ann_facet <- general_ann(bed_long)
 
-output_pdf <- sub("\\..*", "_coverage_mapq.pdf", full_bed_file)
+# Name of the pdf file:
+sample_id <- sub("^(.*)_.*$", "\\1", full_bed_file)
+output_pdf <- paste0(sample_id, "_coverage_mapq.pdf")
 
 # Generate the plot
 generate_plot(bed_long, ann_df, ann_facet, output_pdf)
