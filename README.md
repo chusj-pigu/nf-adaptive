@@ -35,12 +35,12 @@ This workflow will output:
 
 | File Path             | Description |
 | --------------------- | ----------- |
-| ${sample_name}_bg.bam<br>${sample_name}_bg.bam.bai | Aligned and sorted bam file for background only |
-| ${sample_name}_panel.bam<br>${sample_name}_panel.bam.bai | Aligned and sorted bam file for panel only (includding padding region) |
-| ${sample_name}_coverage_mapq.pdf | Plot showing coverage for each genes of the panel (without padding region) and each filtering condition |
-| mosdepth_nofilter/${sample_name}_panel_nofilter.regions.bed.gz<br>mosdepth_primary/${sample_name}_panel_primary.regions.bed.gz<br>mosdepth_mapq60/${sample_name}_panel_mapq60.regions.bed.gz | Bed file containing coverage for each gene in the panel under different filtering conditions |
-| ${sample_name}_bg.bigwig<br>${sample_name}_panel.bigwig | Tow bigwig files for background and panel |
-| multiqc_report_background.html | Multiqc report for coverage of background |
+| ${out_dir}/alignments/${sample_name}_bg.bam<br>${out_dir}/alignments/${sample_name}_bg.bam.bai | Aligned and sorted bam file for background only |
+| ${out_dir}/alignments/${sample_name}_panel.bam<br>${out_dir}/alignments/${sample_name}_panel.bam.bai | Aligned and sorted bam file for panel only (includding padding region) |
+| ${out_dir}/reports/${sample_name}_coverage_mapq.pdf | Plot showing coverage for each genes of the panel (without padding region) and each filtering condition |
+| ${out_dir}/reports/mosdepth/${sample_name}_nofilter.regions.bed.gz<br>${out_dir}/reports/mosdepth/${sample_name}_primary.regions.bed.gz<br>${out_dir}/reports/mosdepth/${sample_name}_mapq60.regions.bed.gz | Bed file containing coverage for each gene in the panel under different filtering conditions |
+| ${out_dir}/alignments/${sample_name}.hg38_bg.bigwig<br>${sample_name}.hg38_panel.bigwig | Tow bigwig files for background and panel |
+| ${out_dir}/reports/multiqc_report_background.html | Multiqc report for coverage of background |
 
 ## Parameters
 
