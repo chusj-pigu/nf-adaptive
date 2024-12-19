@@ -1,8 +1,8 @@
 include { multiqc } from '../modules/multiqc'
 include { mosdepth } from '../modules/mosdepth'
+include { nanoplot } from '../modules/nanoplot'
 include { separate_panel } from '../modules/samtools'
-include { bamCoverage as bigwig_bg } from '../modules/deeptools'
-include { bamCoverage as bigwig_panel } from '../modules/deeptools'
+include { bamCoverage } from '../modules/deeptools'
 
 workflow COVERAGE_SEPARATE {
 
@@ -13,11 +13,39 @@ workflow COVERAGE_SEPARATE {
     bed_nopad
 
     main:
-    // First separate reads mapped to panel from the background
+    // First separate reads mapped to panel from the background:
     separate_panel(bam, bed)
-    bigwig_bg(separate_panel.out.bg)
-    bigwig_panel(separate_panel.out.panel)
 
+    // Create channels for creating bigwig files
+
+    bigwig_bg_in = Channel.of('background')
+        .combine(separate_panel.out.bg)
+    
+    bigwig_panel_in = Channel.of('panel')
+        .combine(separate_panel.out.panel)
+
+    bigwig_in = bigwig_bg_in
+        .mix(bigwig_panel_in)
+    
+    bamCoverage(bigwig_in)
+
+    // Run nanoplot on both background and panel:
+    nano_bg_in = separate_panel.out.bg
+        .flatten()
+        .first()
+        .map { it -> tuple('background', it) }
+    
+    nano_panel_in = separate_panel.out.panel
+        .flatten()
+        .first()
+        .map { it -> tuple('panel', it) }
+
+    nano_ch = nano_bg_in
+        .mix(nano_panel_in)
+
+    nanoplot(nano_ch)
+
+    // Make channels for each bed file and prepare input for mosdepth
     bg_bed_ch = nobed
         .map( it -> tuple(it, 1796, 0))
 
@@ -55,10 +83,11 @@ workflow COVERAGE_SEPARATE {
 
     mosdepth(mosdepth_in)
 
-    // Multiqc for background
+    // Multiqc for background and panel
     multi_ch = mosdepth.out.summary
          .mix(mosdepth.out.dist)
-         .filter( file -> file.name.contains('background') )
+         .filter { file -> file.name.contains('background') || file.name.contains('primary') }
+         .mix(nanoplot.out)
          .collect()
     multiqc(multi_ch)
 
