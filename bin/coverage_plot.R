@@ -3,6 +3,11 @@
 library(ggplot2)
 library(tidyverse)
 
+genes_low_fidelity <-c("AKT3", "NUTM2B", "NUTM2A", "HRAS", "IGH", "GLIS2", 
+                       "MYH11", "TAF15", "CNOT3", "U2AF1", "SMARCB1", "DUX4", 
+                       "DAXX", "TRB locus", "CRLF2", "IL3RA", "P2RY8", "CRLF2_chrY",
+                       "IL3RA_chrY", "P2RY8_chrY")
+
 # Functions ####
 
 # Helper function to read, process and de-duplicate gene names in bed files
@@ -14,14 +19,28 @@ process_bed <- function(input_bed) {
     rename_with(~ gsub(".*_(.*)\\.regions\\.bed$", "\\1", input_bed), coverage) %>%
     mutate(gene = gsub("^\\d{3}_.+?_", "", gene)) %>%
     mutate(gene = ifelse(duplicated(gene), paste(gene, chr, sep = "_"), gene))
-    return(bed)
+  
+  return(bed)
+}
+
+detect_outliers <- function(bed) {
+  
+  outliers <- bed_all %>% 
+    filter(!gene %in% genes_low_fidelity) %>% 
+    filter(!chr == "chrX" & !chr == "chrY") %>%
+    mutate(zscore = (mapq60-mean(mapq60))/sd(mapq60)) %>%
+    filter(abs(zscore) > 3) %>%
+    pull(gene)
+  
+  return(outliers)
+  
 }
 
 normalize_bed <- function(bed) {
   
   # Normalize outliers in coverage
-  max_normal_coverage <- max(bed$nofilter[bed$nofilter < 2 * median])
-  high_coverage_limit <- 2 * median
+  max_normal_coverage <- max(bed$nofilter[bed$nofilter < 1.9 * median])
+  high_coverage_limit <- 1.9 * median
   
   bed <- bed %>%
     mutate(nofilter = case_when(
@@ -41,7 +60,7 @@ normalize_bed <- function(bed) {
   
   # Add fidelity variable for coloring
   bed <- bed %>%
-    mutate(fidelity = ifelse(gene %in% genes_low, "low", "normal"))
+    mutate(fidelity = ifelse(gene %in% genes_low_fidelity, "low", ifelse(gene %in% outliers, "outlier", "normal")))
   
   return(bed)
 }
@@ -51,7 +70,7 @@ df_long <- function(bed) {
     mutate(primary = primary - mapq60) %>%
     mutate(nofilter = nofilter - mapq60 - primary) %>%
     pivot_longer(c(nofilter:mapq60), names_to = "set", values_to = "coverage")
-
+  
   #Rename the sets with more informative names
   bed$set <- gsub("nofilter", "no filter", bed$set)
   bed$set <- gsub("primary", "primary only", bed$set)
@@ -62,17 +81,20 @@ df_long <- function(bed) {
 # Function to dynamically identify and annotate genes with coverage > 2× median
 generate_ann_out <- function(bed_long, bed_all) {
   
- ann <- bed_all %>% 
+  ann <- bed_all %>% 
     filter(gene %in% genes_high) %>%
     pivot_longer(c(nofilter:mapq60), names_to = "set", values_to = "coverage") %>%
     filter(set == "nofilter") %>%
     mutate(ann = paste0(as.character(round(coverage)), "X")) %>%
     select(-coverage) %>%
-    left_join(select(filter(bed_long, coverage == max(coverage)),gene,coverage))
+    left_join(select(filter(bed_long),gene,coverage)) %>%
+    group_by_at(vars(chr:ann)) %>%
+    summarise(coverage = max(coverage)) %>%
+    ungroup()
   
- ann$set <- gsub("nofilter", "no filter", ann$set)
- 
- return(ann)
+  ann$set <- gsub("nofilter", "no filter", ann$set)
+  
+  return(ann)
   
 }
 
@@ -82,12 +104,12 @@ general_ann <- function(bed) {
     filter(chr == "chr8" | chr == "chr16" | chr == "chrY") %>%
     group_by(chr) %>%
     slice(which.max(end)) %>%
-    mutate(coverage = round(median), ann = "Median")
+    mutate(coverage = round(median), ann = paste0("Median (", round(median), "X)"))
   bed2 <- bed %>% 
     filter(chr == "chr8" | chr == "chr16" | chr == "chrY") %>%
     group_by(chr) %>%
     slice(which.max(end)) %>%
-    mutate(coverage = round(bg_cov), ann = "Background coverage")
+    mutate(coverage = round(bg_cov), ann = paste0("Background (", round(bg_cov), "X)"))
   
   bed <- rbind(bed1,bed2) %>%
     mutate(set = factor(set, levels = c("mapq60", "primary only", "no filter"))) %>%
@@ -101,7 +123,7 @@ general_ann <- function(bed) {
 # Function to generate a coverage plot
 generate_plot <- function(bed, ann_out, ann_facet, output_pdf) {
   # Calculate axis parameters
-  max_normal_coverage <- max(bed$coverage[bed$coverage < 2*median])
+  max_normal_coverage <- max(bed$coverage[bed$coverage < 1.9*median])
   axis_ticks <- seq(0, max_normal_coverage, length.out = 5)
   
   # Reorder chromosomes for plotting
@@ -140,7 +162,7 @@ generate_plot <- function(bed, ann_out, ann_facet, output_pdf) {
              panel.grid.major = element_line(colour = "grey")
            ) +
            #scale_y_continuous(limits = c(0, max(axis_ticks)), breaks = axis_ticks) +
-           scale_fill_manual(values = c("turquoise4", "lavenderblush4"), breaks = c("normal", "low"), guide = "none") +
+           scale_fill_manual(values = c("turquoise4", "orangered3", "lavenderblush4"), breaks = c("normal", "outlier", "low"), guide = "none") +
            scale_alpha_manual(values = c(0.33,0.66,1), breaks = c("no filter", "primary only", "mapq60")) +
            coord_cartesian(expand = FALSE, clip = "off") +
            labs(y = "Mean coverage", alpha = "Alignement type filter", fill = "", title = sub("^(.*)_.*$", "\\1", full_bed_file)) )
@@ -163,7 +185,7 @@ prim_bed_file <- args[2]
 mapq60_bed_file <- args[3]
 bg_cov <- as.numeric(args[4])
 
-# Join input bed files together in a list
+## Join input bed files together in a list
 input <- c(full_bed_file, prim_bed_file, mapq60_bed_file)
 bed_list <- lapply(input, process_bed)
 names(bed_list) <- gsub(".*_(.*)\\.regions\\.bed$", "\\1", input)
@@ -176,9 +198,14 @@ bed_all <- bed_list[[1]] %>%
   left_join(select(bed_list[[2]], c(4,5)), by = "gene") %>%
   left_join(select(bed_list[[3]], c(4,5)), by = "gene")
 
+outliers <- detect_outliers(bed_all)
+
 # create a list for outliers (low performing genes and very high coverage genes)
-genes_low <- bed_all %>% filter(mapq60 < 0.5 * nofilter) %>% pull(gene)
-genes_high <- bed_all %>% filter(mapq60 > 2*median | primary > 2*median | nofilter > 2*median) %>% pull(gene)
+genes_low_fidelity <-c("AKT3", "NUTM2B", "NUTM2A", "HRAS", "IGH", "GLIS2", 
+                       "MYH11", "TAF15", "CNOT3", "U2AF1", "SMARCB1", "DUX4", 
+                       "DAXX", "TRB locus", "CRLF2", "IL3RA", "P2RY8", "CRLF2_chrY",
+                       "IL3RA_chrY", "P2RY8_chrY")
+genes_high <- bed_all %>% filter(mapq60 > 1.9*median | primary > 1.9*median | nofilter > 1.9*median) %>% pull(gene)
 
 # Execute functions to make data ready for plotting:
 bed_norm <- normalize_bed(bed_all)
@@ -192,4 +219,3 @@ output_pdf <- paste0(sample_id, "_coverage_mapq.pdf")
 
 # Generate the plot
 generate_plot(bed_long, ann_df, ann_facet, output_pdf)
-
