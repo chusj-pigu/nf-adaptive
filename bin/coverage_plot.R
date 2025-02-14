@@ -5,7 +5,7 @@ library(tidyverse)
 
 genes_low_fidelity <-c("AKT3", "NUTM2B", "NUTM2A", "HRAS", "IGH", "GLIS2", 
                        "MYH11", "TAF15", "CNOT3", "U2AF1", "SMARCB1", "DUX4", 
-                       "DAXX", "TRB locus", "CRLF2", "IL3RA", "P2RY8", "CRLF2_chrY",
+                       "DAXX", "TRB_locus", "NOTCH2", "CRLF2", "IL3RA", "P2RY8", "CRLF2_chrY",
                        "IL3RA_chrY", "P2RY8_chrY")
 
 # Functions ####
@@ -23,45 +23,56 @@ process_bed <- function(input_bed) {
   return(bed)
 }
 
-detect_outliers <- function(bed) {
+detect_outliers_high <- function(bed) {
   
   outliers <- bed_all %>% 
     filter(!gene %in% genes_low_fidelity) %>% 
     filter(!chr == "chrX" & !chr == "chrY") %>%
     mutate(zscore = (mapq60-mean(mapq60))/sd(mapq60)) %>%
-    filter(abs(zscore) > 3) %>%
+    filter(zscore > 2.75) %>%
     pull(gene)
   
   return(outliers)
   
 }
 
-normalize_bed <- function(bed) {
+detect_outliers_low <- function(bed) {
+  
+  outliers <- bed_all %>% 
+    filter(!gene %in% genes_low_fidelity) %>% 
+    filter(!chr == "chrX" & !chr == "chrY") %>%
+    mutate(zscore = (mapq60-mean(mapq60))/sd(mapq60)) %>%
+    filter(zscore < -2.75) %>%
+    pull(gene)
+  
+  return(outliers)
+  
+}
+
+normalize_bed <- function(bed, maximum) {
   
   # Normalize outliers in coverage
-  max_normal_coverage <- max(bed$nofilter[bed$nofilter < 1.9 * median])
-  high_coverage_limit <- 1.9 * median
+  high_coverage_limit <- (ceiling(maximum / 10) * 10)
   
   bed <- bed %>%
     mutate(nofilter = case_when(
-      nofilter > high_coverage_limit & primary > high_coverage_limit ~ (ceiling(max_normal_coverage / 10) * 10),
-      nofilter > high_coverage_limit ~ (ceiling(max_normal_coverage / 10) * 10),
+      nofilter > high_coverage_limit & primary > high_coverage_limit ~ (ceiling(maximum / 10) * 10),
+      nofilter > high_coverage_limit ~ (ceiling(maximum / 10) * 10),
       TRUE ~ nofilter
     ),
     primary = case_when(
-      primary > high_coverage_limit & mapq60 > high_coverage_limit ~ (ceiling(max_normal_coverage / 10) * 10),
-      primary > high_coverage_limit ~ (ceiling(max_normal_coverage / 10) * 10),
+      primary > high_coverage_limit & mapq60 > high_coverage_limit ~ (ceiling(maximum / 10) * 10),
+      primary > high_coverage_limit ~ (ceiling(maximum / 10) * 10),
       TRUE ~ primary
     ),
     mapq60 = case_when(
-      mapq60 > high_coverage_limit ~ (ceiling(max_normal_coverage / 10) * 10),
+      mapq60 > high_coverage_limit ~ (ceiling(maximum / 10) * 10),
       TRUE ~ mapq60
     ))
   
   # Add fidelity variable for coloring
   bed <- bed %>%
-    mutate(fidelity = ifelse(gene %in% genes_low_fidelity, "low", ifelse(gene %in% outliers, "outlier", "normal")))
-  
+    mutate(fidelity = ifelse(gene %in% genes_low_fidelity, "Low fidelity", ifelse(gene %in% outliers_high, "Possible increased copy number", ifelse(gene %in% outliers_low, "Possible decreased copy number", "Normal (-2.75 < zscore < 2.75)"))))
   return(bed)
 }
 
@@ -121,10 +132,9 @@ general_ann <- function(bed) {
 }
 
 # Function to generate a coverage plot
-generate_plot <- function(bed, ann_out, ann_facet, output_pdf) {
+generate_plot <- function(bed, maximum, ann_out, ann_facet, output_pdf) {
   # Calculate axis parameters
-  max_normal_coverage <- max(bed$coverage[bed$coverage < 1.9*median])
-  axis_ticks <- seq(0, max_normal_coverage, length.out = 5)
+  axis_ticks <- seq(0, (ceiling(maximum / 10) * 10), length.out = 5)
   
   # Reorder chromosomes for plotting
   
@@ -158,11 +168,13 @@ generate_plot <- function(bed, ann_out, ann_facet, output_pdf) {
              panel.border = element_rect(colour = "black", fill = NA, linewidth = 1.2),
              panel.background = element_blank(),
              legend.position = "bottom",
+             legend.text = element_text(size = 16),
+             legend.title = element_text(size = 16),
              plot.title = element_text(size = 18),
              panel.grid.major = element_line(colour = "grey")
            ) +
-           #scale_y_continuous(limits = c(0, max(axis_ticks)), breaks = axis_ticks) +
-           scale_fill_manual(values = c("turquoise4", "orangered3", "lavenderblush4"), breaks = c("normal", "outlier", "low"), guide = "none") +
+           scale_y_continuous(limits = c(0, max(axis_ticks)), breaks = axis_ticks) +
+           scale_fill_manual(values = c("lavenderblush4","orangered3" ,"turquoise4", "#DDAA33FF"), breaks = c("Normal (-2.75 < zscore < 2.75)", "Possible increased copy number", "Possible decreased copy number", "Low fidelity")) +
            scale_alpha_manual(values = c(0.33,0.66,1), breaks = c("no filter", "primary only", "mapq60")) +
            coord_cartesian(expand = FALSE, clip = "off") +
            labs(y = "Mean coverage", alpha = "Alignement type filter", fill = "", title = sub("^(.*)_.*$", "\\1", full_bed_file)) )
@@ -198,17 +210,14 @@ bed_all <- bed_list[[1]] %>%
   left_join(select(bed_list[[2]], c(4,5)), by = "gene") %>%
   left_join(select(bed_list[[3]], c(4,5)), by = "gene")
 
-outliers <- detect_outliers(bed_all)
+outliers_high <- detect_outliers_high(bed_all)
+outliers_low <- detect_outliers_low(bed_all)
 
-# create a list for outliers (low performing genes and very high coverage genes)
-genes_low_fidelity <-c("AKT3", "NUTM2B", "NUTM2A", "HRAS", "IGH", "GLIS2", 
-                       "MYH11", "TAF15", "CNOT3", "U2AF1", "SMARCB1", "DUX4", 
-                       "DAXX", "TRB locus", "CRLF2", "IL3RA", "P2RY8", "CRLF2_chrY",
-                       "IL3RA_chrY", "P2RY8_chrY")
-genes_high <- bed_all %>% filter(mapq60 > 1.9*median | primary > 1.9*median | nofilter > 1.9*median) %>% pull(gene)
+genes_high <- bed_all %>% filter(mapq60 > 1.5*median | primary > 1.5*median | nofilter > 1.5*median) %>% pull(gene)
 
 # Execute functions to make data ready for plotting:
-bed_norm <- normalize_bed(bed_all)
+max_normal_coverage <- max(bed_all$nofilter[bed_all$nofilter < 1.5 * median])
+bed_norm <- normalize_bed(bed_all,max_normal_coverage)
 bed_long <- df_long(bed_norm)
 ann_df <- generate_ann_out(bed_long, bed_all)
 ann_facet <- general_ann(bed_long)
@@ -218,4 +227,4 @@ sample_id <- sub("^(.*)_.*$", "\\1", full_bed_file)
 output_pdf <- paste0(sample_id, "_coverage_mapq.pdf")
 
 # Generate the plot
-generate_plot(bed_long, ann_df, ann_facet, output_pdf)
+generate_plot(bed_long, max_normal_coverage, ann_df, ann_facet, output_pdf)
