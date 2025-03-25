@@ -5,29 +5,29 @@ suppressPackageStartupMessages({
     library(tidyverse)
 })
 
-option_list <- list(
-    make_option(c("-n", "--nofilt"), type = "character", default = NULL,
-                            help = "Path to the bed file with coverage calculated with no filters [default: %default]", metavar = "FILE"),
-    make_option(c("-p", "--primary"), type = "character", default = NULL,
-                            help = "Path to the bed file with coverage calculated with filter for primary alignements [default: %default]", metavar = "FILE"),
-    make_option(c("-u", "--unique"), type = "character", default = NULL,
-                            help = "Path to the bed file with coverage calculated with filter for unique alignments [default: %default]", metavar = "FILE"),
-    make_option(c("-b", "--bcov"), type = "integer", default = NULL,
-                            help = "Background coverage [default: %default]", metavar = "NUMBER"),
-    make_option(c("-l", "--lowgenes"), type = "character", default = NULL,
-                            help = "Path to text file containing list of low fidelity genes separated by a newline [default: %default]", metavar = "FILE"),
-)
+# option_list <- list(
+#     make_option(c("-n", "--nofilt"), type = "character", default = NULL,
+#                             help = "Path to the bed file with coverage calculated with no filters [default: %default]", metavar = "FILE"),
+#     make_option(c("-p", "--primary"), type = "character", default = NULL,
+#                             help = "Path to the bed file with coverage calculated with filter for primary alignements [default: %default]", metavar = "FILE"),
+#     make_option(c("-u", "--unique"), type = "character", default = NULL,
+#                             help = "Path to the bed file with coverage calculated with filter for unique alignments [default: %default]", metavar = "FILE"),
+#     make_option(c("-b", "--bcov"), type = "integer", default = NULL,
+#                             help = "Background coverage [default: %default]", metavar = "NUMBER"),
+#     make_option(c("-l", "--lowgenes"), type = "character", default = NULL,
+#                             help = "Path to text file containing list of low fidelity genes separated by a newline [default: %default]", metavar = "FILE"),
+# )
 
-# ---- Parse options ----
-opt <- parse_args(OptionParser(option_list = option_list))
+# # ---- Parse options ----
+# opt <- parse_args(OptionParser(option_list = option_list))
 
-# ---- Read the bed files ----
+# # ---- Read the bed files ----
 
-full_bed_file <- opt$nofilt
-prim_bed_file <- opt$primary
-mapq60_bed_file <- opt$unique
-bg_cov <- as.numeric(opt$bcov)
-genes_low_fidelity <- readLines(opt$lowgenes)
+# full_bed_file <- opt$nofilt
+# prim_bed_file <- opt$primary
+# mapq60_bed_file <- opt$unique
+# bg_cov <- as.numeric(opt$bcov)
+# genes_low_fidelity <- readLines(opt$lowgenes)
 
 # Functions ####
 
@@ -202,6 +202,23 @@ generate_plot <- function(bed, maximum, ann_out, ann_facet, output_pdf) {
   dev.off()
 }
 # Usage ####
+
+# Retrieve command line arguments
+args <- commandArgs(trailingOnly = TRUE)
+
+# Check if the correct number of command line arguments are provided
+if(length(args) < 5 ){
+  print("One required input missing")
+  stop("Requires command line arguments: <no filter bed file [file]> <primary alignment only bed file [file]> <mapq >=60 bed file [file]> <background coverage [int]>")
+}
+
+# Assign input file paths
+full_bed_file <- args[1]
+prim_bed_file <- args[2]
+mapq60_bed_file <- args[3]
+bg_cov <- as.numeric(args[4])
+
+genes_low_fidelity <- readLines(args[5])
 
 ## Join input bed files together in a list
 input <- c(full_bed_file, prim_bed_file, mapq60_bed_file)
