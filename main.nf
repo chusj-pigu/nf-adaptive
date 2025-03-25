@@ -47,7 +47,7 @@ workflow {
   low_fidelity_ch = Channel.fromPath(params.low_fidelity_list)
 
   COVERAGE_SEPARATE(bam_ch, bed_full_ch, nobed_ch, padding_ch)
-  PLOT(COVERAGE_SEPARATE.out.bed, COVERAGE_SEPARATE.out.summary)
+  PLOT(COVERAGE_SEPARATE.out.bed, COVERAGE_SEPARATE.out.summary, low_fidelity_ch)
   
 }
 

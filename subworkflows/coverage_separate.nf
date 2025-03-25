@@ -16,7 +16,7 @@ workflow COVERAGE_SEPARATE {
     main:
     // First separate reads mapped to panel from the background:
     separate_panel(bam, bed)
-    remove_padding(bed,padding)
+    remove_padding(bed, padding)
 
     // Create channels for creating bigwig files
 
@@ -46,7 +46,6 @@ workflow COVERAGE_SEPARATE {
         .mix(nano_panel_in)
 
     nanoplot(nano_ch)
-    bed_nopad = remove_padding.out.bed
 
     // Make channels for each bed file and prepare input for mosdepth
     bg_bed_ch = nobed
@@ -57,7 +56,7 @@ workflow COVERAGE_SEPARATE {
         .combine(separate_panel.out.bg)
         .combine(bg_bed_ch)
 
-    nofilt_bed_ch = bed_nopad
+    nofilt_bed_ch = remove_padding.out
         .map( it -> tuple(it, 1540, 0))
 
     nofilt_mosdepth_in = bam
@@ -65,7 +64,7 @@ workflow COVERAGE_SEPARATE {
         .combine(separate_panel.out.panel)
         .combine(nofilt_bed_ch)
     
-    prim_bed_ch = bed_nopad
+    prim_bed_ch = remove_padding.out
         .map( it -> tuple(it, 1796, 0))
 
     prim_mosdepth_in = bam
@@ -73,7 +72,7 @@ workflow COVERAGE_SEPARATE {
         .combine(separate_panel.out.panel)
         .combine(prim_bed_ch)
 
-    uniq_bed_ch = bed_nopad
+    uniq_bed_ch = remove_padding.out
         .map( it -> tuple(it, 1796, 60))
 
     uniq_mosdepth_in = bam
