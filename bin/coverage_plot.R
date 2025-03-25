@@ -22,7 +22,6 @@ option_list <- list(
 opt <- parse_args(OptionParser(option_list = option_list))
 
 # ---- Read the bed files ----
-genes <- readLines(opt$genes)
 
 full_bed_file <- opt$nofilt
 prim_bed_file <- opt$primary
