@@ -16,8 +16,6 @@ option_list <- list(
                             help = "Background coverage [default: %default]", metavar = "NUMBER"),
     make_option(c("-l", "--lowgenes"), type = "character", default = NULL,
                             help = "Path to text file containing list of low fidelity genes separated by a newline [default: %default]", metavar = "FILE"),
-    make_option(c("-o", "--output"), type = "character", default = "output.pdf",
-                            help = "Output pdf name [default: %default]", metavar = "FILE")
 )
 
 # ---- Parse options ----
@@ -231,5 +229,9 @@ bed_long <- df_long(bed_norm)
 ann_df <- generate_ann_out(bed_long, bed_all)
 ann_facet <- general_ann(bed_long)
 
+# Name of the pdf file:
+sample_id <- sub("^(.*)_.*$", "\\1", full_bed_file)
+output_pdf <- paste0(sample_id, "_coverage_mapq.pdf")
+
 # Generate the plot
-generate_plot(bed_long, max_normal_coverage, ann_df, ann_facet, opt$output)
+generate_plot(bed_long, max_normal_coverage, ann_df, ann_facet, output_pdf)
