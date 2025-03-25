@@ -198,7 +198,7 @@ generate_plot <- function(bed, maximum, ann_out, ann_facet, output_pdf) {
            scale_fill_manual(values = c("lavenderblush4","orangered3" ,"turquoise4", "#DDAA33FF"), breaks = c("Normal (-2.75 < zscore < 2.75)", "Possible increased copy number", "Possible decreased copy number", "Low fidelity")) +
            scale_alpha_manual(values = c(0.33,0.66,1), breaks = c("no filter", "primary only", "mapq60")) +
            coord_cartesian(expand = FALSE, clip = "off") +
-           labs(y = "Mean coverage", alpha = "Alignement type filter", fill = "", title = sub("^(.*)_.*$", "\\1", full_bed_file)) )
+           labs(y = "Mean coverage", alpha = "Alignement type filter", fill = "", title = paste(sub("^(.*)_.*$", "\\1", full_bed_file), " (mean coverage:", round(mean), "X)")))
   dev.off()
 }
 # Usage ####
@@ -227,6 +227,10 @@ names(bed_list) <- gsub(".*_(.*)\\.regions\\.bed$", "\\1", input)
 
 # Store median for pirmary alignment only as a variable for future usage
 median <- median(bed_list[["primary"]]$primary)
+mean <- bed_list[["primary"]] %>%
+    filter(!gene %in% genes_low_fidelity) %>%
+    pull(primary) %>%
+    mean()
 
 # Join bed_files into one dataframe:
 bed_all <- bed_list[[1]] %>%
