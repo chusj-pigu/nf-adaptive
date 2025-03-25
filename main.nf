@@ -42,9 +42,11 @@ workflow {
   // Point to empty bed file to get background coverage
   nobed_ch = Channel.fromPath("${projectDir}/assets/NO_BED")
 
-  bed_nopad_ch = Channel.fromPath(params.bed_nopad) // Bed file without buffer region
+  padding_ch = Channel.value(params.padding)        // Padding added downstream and upstream of the ROI
 
-  COVERAGE_SEPARATE(bam_ch, bed_full_ch, nobed_ch, bed_nopad_ch)
+  low_fidelity_ch = Channel.fromPath(params.low_fidelity_list)
+
+  COVERAGE_SEPARATE(bam_ch, bed_full_ch, nobed_ch, padding_ch)
   PLOT(COVERAGE_SEPARATE.out.bed, COVERAGE_SEPARATE.out.summary)
   
 }

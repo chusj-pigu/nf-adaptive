@@ -1,12 +1,36 @@
 #!/usr/bin/env Rscript
 
-library(ggplot2)
-library(tidyverse)
+suppressPackageStartupMessages({
+    library(optparse)
+    library(tidyverse)
+})
 
-genes_low_fidelity <-c("AKT3", "NUTM2B", "NUTM2A", "HRAS", "IGH", "GLIS2", 
-                       "MYH11", "TAF15", "CNOT3", "U2AF1", "SMARCB1", "DUX4", 
-                       "DAXX", "TRB_locus", "NOTCH2", "CRLF2", "IL3RA", "P2RY8", "CRLF2_chrY",
-                       "IL3RA_chrY", "P2RY8_chrY")
+option_list <- list(
+    make_option(c("-n", "--nofilt"), type = "character", default = NULL,
+                            help = "Path to the bed file with coverage calculated with no filters [default: %default]", metavar = "FILE"),
+    make_option(c("-p", "--primary"), type = "character", default = NULL,
+                            help = "Path to the bed file with coverage calculated with filter for primary alignements [default: %default]", metavar = "FILE"),
+    make_option(c("-u", "--unique"), type = "character", default = NULL,
+                            help = "Path to the bed file with coverage calculated with filter for unique alignments [default: %default]", metavar = "FILE"),
+    make_option(c("-b", "--bcov"), type = "integer", default = NULL,
+                            help = "Background coverage [default: %default]", metavar = "NUMBER"),
+    make_option(c("-l", "--lowgenes"), type = "character", default = NULL,
+                            help = "Path to text file containing list of low fidelity genes separated by a newline [default: %default]", metavar = "FILE"),
+    make_option(c("-o", "--output"), type = "character", default = "output.pdf",
+                            help = "Output pdf name [default: %default]", metavar = "FILE")
+)
+
+# ---- Parse options ----
+opt <- parse_args(OptionParser(option_list = option_list))
+
+# ---- Read the bed files ----
+genes <- readLines(opt$genes)
+
+full_bed_file <- opt$nofilt
+prim_bed_file <- opt$primary
+mapq60_bed_file <- opt$unique
+bg_cov <- as.numeric(opt$bcov)
+genes_low_fidelity <- readLines(opt$lowgenes)
 
 # Functions ####
 
@@ -19,41 +43,41 @@ process_bed <- function(input_bed) {
     rename_with(~ gsub(".*_(.*)\\.regions\\.bed$", "\\1", input_bed), coverage) %>%
     mutate(gene = gsub("^\\d{3}_.+?_", "", gene)) %>%
     mutate(gene = ifelse(duplicated(gene), paste(gene, chr, sep = "_"), gene))
-  
+
   return(bed)
 }
 
 detect_outliers_high <- function(bed) {
-  
-  outliers <- bed_all %>% 
-    filter(!gene %in% genes_low_fidelity) %>% 
+
+  outliers <- bed_all %>%
+    filter(!gene %in% genes_low_fidelity) %>%
     filter(!chr == "chrX" & !chr == "chrY") %>%
     mutate(zscore = (mapq60-mean(mapq60))/sd(mapq60)) %>%
     filter(zscore > 2.75) %>%
     pull(gene)
-  
+
   return(outliers)
-  
+
 }
 
 detect_outliers_low <- function(bed) {
-  
-  outliers <- bed_all %>% 
-    filter(!gene %in% genes_low_fidelity) %>% 
+
+  outliers <- bed_all %>%
+    filter(!gene %in% genes_low_fidelity) %>%
     filter(!chr == "chrX" & !chr == "chrY") %>%
     mutate(zscore = (mapq60-mean(mapq60))/sd(mapq60)) %>%
     filter(zscore < -2.75) %>%
     pull(gene)
-  
+
   return(outliers)
-  
+
 }
 
 normalize_bed <- function(bed, maximum) {
-  
+
   # Normalize outliers in coverage
   high_coverage_limit <- (ceiling(maximum / 10) * 10)
-  
+
   bed <- bed %>%
     mutate(nofilter = case_when(
       nofilter > high_coverage_limit & primary > high_coverage_limit ~ (ceiling(maximum / 10) * 10),
@@ -69,7 +93,7 @@ normalize_bed <- function(bed, maximum) {
       mapq60 > high_coverage_limit ~ (ceiling(maximum / 10) * 10),
       TRUE ~ mapq60
     ))
-  
+
   # Add fidelity variable for coloring
   bed <- bed %>%
     mutate(fidelity = ifelse(gene %in% genes_low_fidelity, "Low fidelity", ifelse(gene %in% outliers_high, "Possible increased copy number", ifelse(gene %in% outliers_low, "Possible decreased copy number", "Normal (-2.75 < zscore < 2.75)"))))
@@ -81,18 +105,18 @@ df_long <- function(bed) {
     mutate(primary = primary - mapq60) %>%
     mutate(nofilter = nofilter - mapq60 - primary) %>%
     pivot_longer(c(nofilter:mapq60), names_to = "set", values_to = "coverage")
-  
+
   #Rename the sets with more informative names
   bed$set <- gsub("nofilter", "no filter", bed$set)
   bed$set <- gsub("primary", "primary only", bed$set)
-  
+
   return(bed)
 }
 
 # Function to dynamically identify and annotate genes with coverage > 2× median
 generate_ann_out <- function(bed_long, bed_all) {
-  
-  ann <- bed_all %>% 
+
+  ann <- bed_all %>%
     filter(gene %in% genes_high) %>%
     pivot_longer(c(nofilter:mapq60), names_to = "set", values_to = "coverage") %>%
     filter(set == "nofilter") %>%
@@ -102,52 +126,52 @@ generate_ann_out <- function(bed_long, bed_all) {
     group_by_at(vars(chr:ann)) %>%
     summarise(coverage = max(coverage)) %>%
     ungroup()
-  
+
   ann$set <- gsub("nofilter", "no filter", ann$set)
-  
+
   return(ann)
-  
+
 }
 
 # Make annotation to label median and background coverage
 general_ann <- function(bed) {
-  bed1 <- bed %>% 
+  bed1 <- bed %>%
     filter(chr == "chr8" | chr == "chr16" | chr == "chrY") %>%
     group_by(chr) %>%
     slice(which.max(end)) %>%
     mutate(coverage = round(median), ann = paste0("Median (", round(median), "X)"))
-  bed2 <- bed %>% 
+  bed2 <- bed %>%
     filter(chr == "chr8" | chr == "chr16" | chr == "chrY") %>%
     group_by(chr) %>%
     slice(which.max(end)) %>%
     mutate(coverage = round(bg_cov), ann = paste0("Background (", round(bg_cov), "X)"))
-  
+
   bed <- rbind(bed1,bed2) %>%
     mutate(set = factor(set, levels = c("mapq60", "primary only", "no filter"))) %>%
     mutate(chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE))) %>%
     mutate(gene = factor(gene, levels = unique(gene)))
-  
+
   return(bed)
-  
+
 }
 
 # Function to generate a coverage plot
 generate_plot <- function(bed, maximum, ann_out, ann_facet, output_pdf) {
   # Calculate axis parameters
   axis_ticks <- seq(0, (ceiling(maximum / 10) * 10), length.out = 5)
-  
+
   # Reorder chromosomes for plotting
-  
+
   bed <- bed %>%
     mutate(set = factor(set, levels = c("no filter", "primary only", "mapq60"))) %>%
     mutate(chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE))) %>%
     mutate(gene = factor(gene, levels = unique(gene)))
-  
+
   ann_out <- ann_out %>%
     mutate(set = factor(set, levels = c("no filter", "primary only", "mapq60"))) %>%
     mutate(chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE))) %>%
     mutate(gene = factor(gene, levels = unique(gene)))
-  
+
   # Plot and save as PDF
   pdf(output_pdf, width = 22, height = 14)
   print( ggplot() +
@@ -182,21 +206,6 @@ generate_plot <- function(bed, maximum, ann_out, ann_facet, output_pdf) {
 }
 # Usage ####
 
-# Retrieve command line arguments
-args <- commandArgs(trailingOnly = TRUE)
-
-# Check if the correct number of command line arguments are provided
-if(length(args) < 4 ){
-  print("One required input missing")
-  stop("Requires command line arguments: <no filter bed file [file]> <primary alignment only bed file [file]> <mapq >=60 bed file [file]> <background coverage [int]>")
-}
-
-# Assign input file paths
-full_bed_file <- args[1]
-prim_bed_file <- args[2]
-mapq60_bed_file <- args[3]
-bg_cov <- as.numeric(args[4])
-
 ## Join input bed files together in a list
 input <- c(full_bed_file, prim_bed_file, mapq60_bed_file)
 bed_list <- lapply(input, process_bed)
@@ -205,7 +214,7 @@ names(bed_list) <- gsub(".*_(.*)\\.regions\\.bed$", "\\1", input)
 # Store median for pirmary alignment only as a variable for future usage
 median <- median(bed_list[["primary"]]$primary)
 
-# Join bed_files into one dataframe: 
+# Join bed_files into one dataframe:
 bed_all <- bed_list[[1]] %>%
   left_join(select(bed_list[[2]], c(4,5)), by = "gene") %>%
   left_join(select(bed_list[[3]], c(4,5)), by = "gene")
@@ -222,9 +231,5 @@ bed_long <- df_long(bed_norm)
 ann_df <- generate_ann_out(bed_long, bed_all)
 ann_facet <- general_ann(bed_long)
 
-# Name of the pdf file:
-sample_id <- sub("^(.*)_.*$", "\\1", full_bed_file)
-output_pdf <- paste0(sample_id, "_coverage_mapq.pdf")
-
 # Generate the plot
-generate_plot(bed_long, max_normal_coverage, ann_df, ann_facet, output_pdf)
+generate_plot(bed_long, max_normal_coverage, ann_df, ann_facet, opt$output)

@@ -2,6 +2,7 @@ include { multiqc } from '../modules/multiqc'
 include { mosdepth } from '../modules/mosdepth'
 include { nanoplot } from '../modules/nanoplot'
 include { separate_panel } from '../modules/samtools'
+include { remove_padding } from '../modules/ingress'
 include { bamCoverage } from '../modules/deeptools'
 
 workflow COVERAGE_SEPARATE {
@@ -10,11 +11,12 @@ workflow COVERAGE_SEPARATE {
     bam
     bed
     nobed
-    bed_nopad
+    padding
 
     main:
     // First separate reads mapped to panel from the background:
     separate_panel(bam, bed)
+    remove_padding(bed,padding)
 
     // Create channels for creating bigwig files
 
@@ -44,6 +46,7 @@ workflow COVERAGE_SEPARATE {
         .mix(nano_panel_in)
 
     nanoplot(nano_ch)
+    bed_nopad = remove_padding.out.bed
 
     // Make channels for each bed file and prepare input for mosdepth
     bg_bed_ch = nobed

@@ -7,7 +7,7 @@ workflow PLOT {
     take:
     bed
     summary
-
+    low_fidelity_list
 
     main:
     gzip(bed)
@@ -26,6 +26,6 @@ workflow PLOT {
         .last()
         .map { row -> row.tokenize('\t')[3].toDouble() }
 
-    coverage_as(nofilter_bed_ch, primary_bed_ch, uniq_bed_ch, background_coverage)
+    coverage_as(nofilter_bed_ch, primary_bed_ch, uniq_bed_ch, background_coverage, low_fidelity_list)
 
 }
