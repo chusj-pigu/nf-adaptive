@@ -38,7 +38,7 @@ process_bed <- function(input_bed) {
     dplyr::rename(chr = V1, start = V2, end = V3, gene = V4, coverage = V5) %>%
     arrange(chr,start,end) %>%
     rename_with(~ gsub(".*_(.*)\\.regions\\.bed$", "\\1", input_bed), coverage) %>%
-    mutate(gene = gsub("^\\d{3}_.+?_", "", gene)) %>%
+    mutate(gene = gsub("^\\d{4}_.+?_", "", gene)) %>%
     mutate(gene = ifelse(duplicated(gene), paste(gene, chr, sep = "_"), gene))
 
   return(bed)
